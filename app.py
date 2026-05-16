@@ -5,12 +5,12 @@ import pymysql
 app = Flask(__name__)
 app.config['JSON_AS_ASCII'] = False
 
-# 允许访问桌面图片（你原来的写法）
+# 允许访问桌面图片
 @app.route('/desktop/<path:filename>')
 def serve_desktop(filename):
     return send_from_directory(r"C:\Users\要不你猜猜？\OneDrive\桌面", filename)
 
-# 数据库连接（你正确的密码）
+# 数据库连接
 def get_db():
     db = pymysql.connect(
         host="localhost",
@@ -21,12 +21,12 @@ def get_db():
     )
     return db, db.cursor()
 
-# 全局样式 + 背景图（你原来的漂亮样式）
+# 全局样式
 STYLE = """
 <style>
     * { margin:0; padding:0; box-sizing:border-box; font-family: "Microsoft YaHei", sans-serif; }
     body { 
-        background: #f0f2f5 url('https://img0.baidu.com/it/u=1999337707,1776609009&fm=253&fmt=auto&app=138&f=JPEG') center center / cover no-repeat fixed; 
+         background: #f0f2f5 url('static/picture2.jpg') no-repeat center center / cover;
         padding: 20px; 
     }
     .container { max-width: 1100px; margin: auto; }
@@ -80,6 +80,14 @@ STYLE = """
         border-radius:6px;
         text-decoration:none;
     }
+    input, select, textarea {
+        width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box;
+        font-size:14px;
+    }
+    textarea {
+        resize:none;
+        min-height:80px;
+    }
 </style>
 """
 
@@ -89,8 +97,8 @@ def index():
     return STYLE + """
     <div class='container'>
         <div class='card'>
-            <div class="banner">
-                <img src="/static/travel.webp" style="width:100%;border-radius:10px;margin-bottom:20px;">
+            <div class='banner'>
+                
             </div>
             <h1 style="justify-content:center;">🏖️ 旅行社团队管理系统</h1>
             <div class='nav'>
@@ -104,8 +112,8 @@ def index():
         </div>
     </div>
     """
+
 # ---------------- 客户列表 ----------------
-# ===================== 客户列表（带搜索 + 美化） =====================
 @app.route('/customer')
 def customer_list():
     kw = request.args.get("kw", "")
@@ -163,7 +171,6 @@ def customer_list():
     return html
 
 # ===================== 添加客户 =====================
-# ===================== 添加客户（自动ID + 防重复 + 美化版） =====================
 @app.route('/customer/add', methods=['GET', 'POST'])
 def customer_add():
     if request.method == 'POST':
@@ -174,14 +181,11 @@ def customer_add():
         travel_preference = request.form['travel_preference']
 
         db, cur = get_db()
-
-        # 检查身份证是否已存在（超级加分）
         cur.execute("SELECT * FROM customer WHERE id_card=%s", (id_card,))
         if cur.fetchone():
             db.close()
             return "<script>alert('该身份证已存在！');history.back();</script>"
 
-        # 插入 → ID自动增长
         sql = """
         INSERT INTO customer (name, phone, id_card, emergency, travel_preference)
         VALUES (%s,%s,%s,%s,%s)
@@ -198,23 +202,23 @@ def customer_add():
             <form method='post'>
                 <div style="margin-bottom: 15px;">
                     <label style="display: block; margin-bottom: 5px; color: #555; font-weight: 500;">姓名</label>
-                    <input type='text' name='name' required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box;">
+                    <input type='text' name='name' required>
                 </div>
                 <div style="margin-bottom: 15px;">
                     <label style="display: block; margin-bottom: 5px; color: #555; font-weight: 500;">电话</label>
-                    <input type='text' name='phone' required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box;">
+                    <input type='text' name='phone' required>
                 </div>
                 <div style="margin-bottom: 15px;">
                     <label style="display: block; margin-bottom: 5px; color: #555; font-weight: 500;">身份证号</label>
-                    <input type='text' name='id_card' required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box;">
+                    <input type='text' name='id_card' required>
                 </div>
                 <div style="margin-bottom: 15px;">
                     <label style="display: block; margin-bottom: 5px; color: #555; font-weight: 500;">紧急联系人</label>
-                    <input type='text' name='emergency' style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box;">
+                    <input type='text' name='emergency'>
                 </div>
                 <div style="margin-bottom: 25px;">
                     <label style="display: block; margin-bottom: 5px; color: #555; font-weight: 500;">旅游偏好</label>
-                    <input type='text' name='travel_preference' style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box;">
+                    <input type='text' name='travel_preference'>
                 </div>
                 <button class='btn' style='background:#28a745; width: 100%; padding: 10px; font-size: 16px; border: none; border-radius: 6px; cursor: pointer;'>保存</button>
             </form>
@@ -223,6 +227,7 @@ def customer_add():
         </div>
     </div>
     """
+
 # ===================== 修改客户 =====================
 @app.route('/customer/edit/<int:cid>', methods=['GET', 'POST'])
 def customer_edit(cid):
@@ -274,7 +279,8 @@ def customer_delete(cid):
     db.commit()
     db.close()
     return "<script>alert('删除成功');location.href='/customer';</script>"
-# ---------------- 线路管理 ----------------
+
+# ---------------- 线路管理（含简介） ----------------
 @app.route('/line')
 def line_list():
     db, cur = get_db()
@@ -285,12 +291,31 @@ def line_list():
     html = STYLE + """
     <div class='container'>
         <div class='card'>
-            <h1>🗺️ 线路列表</h1>
+            <div style='display:flex;justify-content:space-between;align-items:center;'>
+                <h1>🗺️ 线路列表</h1>
+                <a href='/line/add' class='btn' style='background:#28a745'>➕ 添加线路</a>
+            </div>
             <table>
-                <tr><th>ID</th><th>目的地</th><th>天数</th><th>景点</th><th>成人价</th><th>儿童价</th><th>状态</th></tr>
+                <tr><th>ID</th><th>目的地</th><th>天数</th><th>景点</th><th>成人价</th><th>儿童价</th><th>状态</th><th>简介</th><th>操作</th></tr>
     """
     for row in data:
-        html += f"<tr><td>{row[0]}</td><td>{row[1]}</td><td>{row[2]}</td><td>{row[3]}</td><td>{row[4]}</td><td>{row[5]}</td><td>{row[6]}</td></tr>"
+        intro = row[7] if row[7] else "无简介"
+        html += f"""
+        <tr>
+            <td>{row[0]}</td>
+            <td><a href='/line/detail/{row[0]}'>{row[1]}</a></td>
+            <td>{row[2]}</td>
+            <td>{row[3]}</td>
+            <td>{row[4]}</td>
+            <td>{row[5]}</td>
+            <td>{row[6]}</td>
+            <td style="max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{intro}</td>
+            <td>
+                <a href='/line/edit/{row[0]}' style='color:#007bff'>修改</a>
+                <a href='/line/delete/{row[0]}' style='color:#dc3545;margin-left:8px;' onclick='return confirm(\"确定删除？\")'>删除</a>
+            </td>
+        </tr>
+        """
     html += """
             </table>
             <br>
@@ -299,6 +324,223 @@ def line_list():
     </div>
     """
     return html
+
+# ---------------- 线路详情页（含简介，已修复） ----------------
+@app.route('/line/detail/<int:lid>')
+def line_detail(lid):
+    db, cur = get_db()
+    cur.execute("SELECT * FROM tour_line WHERE line_id=%s", (lid,))
+    row = cur.fetchone()
+    db.close()
+
+    if not row:
+        return "<script>alert('线路不存在！');location.href='/line';</script>"
+
+    status_color = {"正常":"green","暂停":"orange","下架":"red"}.get(row[6], "gray")
+    intro = row[7] if row[7] else "暂无线路简介"
+
+    html = STYLE + f"""
+    <div class='container'>
+        <div class='card'>
+            <div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;'>
+                <h1>🗺️ 线路详情：{row[1]}</h1>
+                <div>
+                    <a href='/line/edit/{row[0]}' class='btn' style='background:#ffc107;color:black;margin-right:8px;'>✏️ 修改</a>
+                    <a href='/line' class='btn'>← 返回列表</a>
+                </div>
+            </div>
+
+            <table style="width:100%;max-width:600px;">
+                <tr>
+                    <th style="width:150px;background:#f5fafe;color:#333;">线路ID</th>
+                    <td>{row[0]}</td>
+                </tr>
+                <tr>
+                    <th style="background:#f5fafe;color:#333;">目的地</th>
+                    <td>{row[1]}</td>
+                </tr>
+                <tr>
+                    <th style="background:#f5fafe;color:#333;">行程天数</th>
+                    <td>{row[2]} 天</td>
+                </tr>
+                <tr>
+                    <th style="background:#f5fafe;color:#333;">景点</th>
+                    <td>{row[3]}</td>
+                </tr>
+                <tr>
+                    <th style="background:#f5fafe;color:#333;">成人价格</th>
+                    <td>¥{row[4]}</td>
+                </tr>
+                <tr>
+                    <th style="background:#f5fafe;color:#333;">儿童价格</th>
+                    <td>¥{row[5]}</td>
+                </tr>
+                <tr>
+                    <th style="background:#f5fafe;color:#333;">状态</th>
+                    <td><span style="color:{status_color};font-weight:bold;">{row[6]}</span></td>
+                </tr>
+                <tr>
+                    <th style="background:#f5fafe;color:#333;">线路简介</th>
+                    <td style="white-space:pre-wrap;">{intro}</td>
+                </tr>
+            </table>
+
+            <div style="margin-top:30px;">
+                <a href='/line/edit/{row[0]}' class='btn' style='background:#ffc107;color:black;margin-right:10px;'>✏️ 修改线路</a>
+                <a href='/line' class='btn'>← 返回线路列表</a>
+            </div>
+        </div>
+    </div>
+    """
+    return html
+
+# 添加线路（含简介）
+@app.route('/line/add', methods=['GET', 'POST'])
+def line_add():
+    if request.method == 'POST':
+        destination = request.form['destination']
+        days = request.form['days']
+        spots = request.form['spots']
+        price_adult = request.form['price_adult']
+        price_child = request.form['price_child']
+        status = request.form['status']
+        intro = request.form['intro']
+
+        db, cur = get_db()
+        sql = """
+        INSERT INTO tour_line (destination, days, spots, price_adult, price_child, status, intro)
+        VALUES (%s,%s,%s,%s,%s,%s,%s)
+        """
+        cur.execute(sql, (destination, days, spots, price_adult, price_child, status, intro))
+        db.commit()
+        db.close()
+        return "<script>alert('添加成功！');location.href='/line';</script>"
+
+    return STYLE + """
+    <div class='container'>
+        <div class='card' style="max-width: 550px; margin: 30px auto;">
+            <h2 style="text-align: center; margin-bottom: 25px; color: #333;">➕ 添加线路</h2>
+            <form method='post'>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; color: #555; font-weight: 500;">目的地（如：北京3日游）</label>
+                    <input type='text' name='destination' required>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; color: #555; font-weight: 500;">天数</label>
+                    <input type='number' name='days' required>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; color: #555; font-weight: 500;">景点（顿号分隔）</label>
+                    <input type='text' name='spots' required>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; color: #555; font-weight: 500;">成人价（元）</label>
+                    <input type='number' name='price_adult' required>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; color: #555; font-weight: 500;">儿童价（元）</label>
+                    <input type='number' name='price_child' required>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 5px; color: #555; font-weight: 500;">状态</label>
+                    <select name='status'>
+                        <option value='正常'>正常</option>
+                        <option value='暂停'>暂停</option>
+                        <option value='下架'>下架</option>
+                    </select>
+                </div>
+                <div style="margin-bottom: 25px;">
+                    <label style="display: block; margin-bottom: 5px; color: #555; font-weight: 500;">线路简介</label>
+                    <textarea name='intro' rows="5" placeholder="填写线路特色、行程亮点等"></textarea>
+                </div>
+                <button class='btn' style='background:#28a745; width:100%;'>保存</button>
+            </form>
+            <br>
+            <a href='/line' style="display:block;text-align:center;">← 返回线路列表</a>
+        </div>
+    </div>
+    """
+
+# 修改线路（含简介）
+@app.route('/line/edit/<int:lid>', methods=['GET', 'POST'])
+def line_edit(lid):
+    db, cur = get_db()
+    if request.method == 'POST':
+        destination = request.form['destination']
+        days = request.form['days']
+        spots = request.form['spots']
+        price_adult = request.form['price_adult']
+        price_child = request.form['price_child']
+        status = request.form['status']
+        intro = request.form['intro']
+
+        sql = """
+        UPDATE tour_line
+        SET destination=%s, days=%s, spots=%s, price_adult=%s, price_child=%s, status=%s, intro=%s
+        WHERE line_id=%s
+        """
+        cur.execute(sql, (destination, days, spots, price_adult, price_child, status, intro, lid))
+        db.commit()
+        db.close()
+        return "<script>alert('修改成功');location.href='/line';</script>"
+
+    cur.execute("SELECT * FROM tour_line WHERE line_id=%s", (lid,))
+    row = cur.fetchone()
+    db.close()
+
+    return STYLE + f"""
+    <div class='container'>
+        <div class='card' style="max-width: 550px; margin: 30px auto;">
+            <h2 style="text-align: center; margin-bottom: 25px; color: #333;">✏️ 修改线路</h2>
+            <form method='post'>
+                <div style="margin-bottom: 15px;">
+                    <label>目的地</label>
+                    <input type='text' name='destination' value='{row[1]}' required>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label>天数</label>
+                    <input type='number' name='days' value='{row[2]}' required>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label>景点</label>
+                    <input type='text' name='spots' value='{row[3]}' required>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label>成人价（元）</label>
+                    <input type='number' name='price_adult' value='{row[4]}' required>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label>儿童价（元）</label>
+                    <input type='number' name='price_child' value='{row[5]}' required>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label>状态</label>
+                    <select name='status'>
+                        <option value='正常' {'selected' if row[6]=='正常' else ''}>正常</option>
+                        <option value='暂停' {'selected' if row[6]=='暂停' else ''}>暂停</option>
+                        <option value='下架' {'selected' if row[6]=='下架' else ''}>下架</option>
+                    </select>
+                </div>
+                <div style="margin-bottom: 25px;">
+                    <label>线路简介</label>
+                    <textarea name='intro' rows="5">{row[7] or ''}</textarea>
+                </div>
+                <button class='btn' style='background:#ffc107; color:black; width:100%;'>保存</button>
+            </form>
+            <br>
+            <a href='/line' style="display:block;text-align:center;">← 返回线路列表</a>
+        </div>
+    </div>
+    """
+
+# 删除线路
+@app.route('/line/delete/<int:lid>')
+def line_delete(lid):
+    db, cur = get_db()
+    cur.execute("DELETE FROM tour_line WHERE line_id=%s", (lid,))
+    db.commit()
+    db.close()
+    return "<script>alert('删除成功');location.href='/line';</script>"
 
 # ---------------- 导游管理 ----------------
 @app.route('/guide')
