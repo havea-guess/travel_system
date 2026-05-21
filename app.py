@@ -1009,35 +1009,84 @@ def report():
     return html
 
 # ========== 异常处理 ==========
+# ========== 异常处理（完整版：状态 + 标记已处理 + 筛选） ==========
 @app.route('/exception', methods=['GET','POST'])
 def exception():
-    if 'uid' not in session: return redirect('/')
+    if 'uid' not in session:
+        return redirect('/')
+
+    # ==============================================
+    # 1. 提交异常（原来的功能）
+    # ==============================================
     if request.method == 'POST':
         group_id = request.form['group_id']
         type_ = request.form['type']
         reason = request.form['reason']
+        new_guide = request.form.get('new_guide', '').strip()
+
         db, cur = get_db()
+
         if type_ == 'cancel':
             cur.execute("UPDATE tour_group SET status='已取消' WHERE group_id=%s", (group_id,))
         elif type_ == 'refund':
-            cur.execute("UPDATE orders SET status='已退团', paid=paid*0.7 WHERE group_id=%s", (group_id,))
-        elif type_ == 'change_guide':
-            new_guide = request.form.get('new_guide', '').strip()
-            if new_guide:
-                cur.execute("UPDATE tour_group SET guide_id=%s WHERE group_id=%s", (new_guide, group_id))
-        cur.execute("INSERT INTO exception_log(group_id, type, reason) VALUES(%s,%s,%s)",
-                    (group_id, type_, reason))
+            cur.execute("UPDATE orders SET order_status='已退团', received_amount=received_amount*0.7 WHERE group_id=%s", (group_id,))
+        elif type_ == 'change_guide' and new_guide:
+            cur.execute("UPDATE tour_group SET guide_id=%s WHERE group_id=%s", (new_guide, group_id))
+
+        # 插入日志，默认未处理
+        cur.execute("""
+            INSERT INTO exception_log(group_id, type, reason, status)
+            VALUES(%s, %s, %s, '未处理')
+        """, (group_id, type_, reason))
+
         db.commit()
         db.close()
-        flash("异常处理成功","success")
+        flash("异常提交成功", "success")
         return redirect('/exception')
-    db, cur=get_db()
-    cur.execute("SELECT * FROM exception_log ORDER BY id DESC")
-    logs=cur.fetchall()
+
+    # ==============================================
+    # 2. 标记为已处理（按钮功能）
+    # ==============================================
+    if request.args.get('mark_done'):
+        log_id = request.args.get('mark_done')
+        db, cur = get_db()
+        cur.execute("UPDATE exception_log SET status='已处理' WHERE id=%s", (log_id,))
+        db.commit()
+        db.close()
+        flash("已标记为已处理 ✅", "success")
+        return redirect('/exception')
+
+    # ==============================================
+    # 3. 筛选功能（全部 / 未处理 / 已处理）
+    # ==============================================
+    filter_status = request.args.get('filter', 'all')
+
+    db, cur = get_db()
+    if filter_status == '未处理':
+        cur.execute("SELECT * FROM exception_log WHERE status='未处理' ORDER BY id DESC")
+    elif filter_status == '已处理':
+        cur.execute("SELECT * FROM exception_log WHERE status='已处理' ORDER BY id DESC")
+    else:
+        cur.execute("SELECT * FROM exception_log ORDER BY id DESC")
+
+    logs = cur.fetchall()
     db.close()
-    html=STYLE + """
+
+    # ==============================================
+    # 页面输出
+    # ==============================================
+    html = STYLE + """
     <div class='container'><div class='card'>
     <h1>⚠️ 异常处理中心</h1>
+
+    <!-- 筛选菜单 -->
+    <div style="margin:15px 0; display:flex; gap:10px;">
+        <a href="/exception?filter=all" class="btn">全部</a>
+        <a href="/exception?filter=未处理" class="btn btn-yellow">未处理</a>
+        <a href="/exception?filter=已处理" class="btn btn-green">已处理</a>
+    </div>
+
+    <!-- 提交表单 -->
     <form method='post'>
         <input type='number' name='group_id' placeholder='团ID' required>
         <select name='type' required>
@@ -1049,14 +1098,58 @@ def exception():
         <textarea name='reason' placeholder='异常原因' required></textarea>
         <button class='btn btn-red' style='width:100%;'>提交处理</button>
     </form>
+
     <h2>异常记录</h2>
-    <table><tr><th>ID</th><th>团ID</th><th>类型</th><th>原因</th><th>时间</th></tr>"""
+    <table>
+        <tr>
+            <th>ID</th>
+            <th>团ID</th>
+            <th>类型</th>
+            <th>原因</th>
+            <th>时间</th>
+            <th>状态</th>
+            <th>操作</th>
+        </tr>"""
+
     for log in logs:
+        log_id = log[0]
+        group_id = log[1]
+        type_name = log[2]
+        reason = log[3]
+        create_time = log[5] if len(log) >= 6 else ""
+        status = log[4] if len(log) >= 5 else "未处理"
+
+        # 状态颜色
+        if status == "已处理":
+            status_html = f"<span style='color:green; font-weight:bold;'>{status}</span>"
+            btn_html = ""  # 已处理 → 不显示按钮
+        else:
+            status_html = f"<span style='color:red; font-weight:bold;'>{status}</span>"
+            btn_html = f'''
+                <a href="/exception?mark_done={log_id}" 
+                    class="btn btn-green"
+                    onclick="return confirm('确定标记为已处理？')">
+                    标记已处理
+                </a>
+            '''
+
         html += f"""
         <tr>
-            <td>{log[0]}</td><td>{log[1]}</td><td>{log[2]}</td><td>{log[3]}</td><td>{log[4]}</td>
+            <td>{log_id}</td>
+            <td>{group_id}</td>
+            <td>{type_name}</td>
+            <td>{reason}</td>
+            <td>{create_time}</td>
+            <td>{status_html}</td>
+            <td>{btn_html}</td>
         </tr>"""
-    html += """</table><br><a href='/index'>← 返回首页</a></div></div>"""
+
+    html += """
+    </table>
+    <br>
+    <a href='/index'>← 返回首页</a>
+    </div></div>
+    """
     return html
 
 # 退出登录
