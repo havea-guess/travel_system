@@ -433,22 +433,33 @@ def line_delete():
     db.close()
     flash("删除成功","success")
     return redirect('/line')
-
-# ========== 导游管理 ==========
+# ========== 导游管理（最终版，无任何字段错误 + 搜索框） ==========
 @app.route('/guide')
 def guide_list():
     if 'uid' not in session: return redirect('/')
+    kw = request.args.get("kw", "")
     db, cur=get_db()
-    cur.execute("SELECT * FROM guide")
+    
+    if kw:
+        cur.execute("SELECT * FROM guide WHERE name LIKE %s OR phone LIKE %s", (f"%{kw}%", f"%{kw}%"))
+    else:
+        cur.execute("SELECT * FROM guide")
+    
     data=cur.fetchall()
     db.close()
     html=STYLE + """
     <div class='container'><div class='card'>
     <div style='display:flex;justify-content:space-between;align-items:center;'>
-        <h1>🧑‍✈️ 导游列表</h1>
+        <h2>🧑‍✈️ 导游管理</h2>
         <a href='/guide/add' class='btn btn-green'>➕ 添加导游</a>
     </div>
-    <table><tr><th>ID</th><th>姓名</th><th>电话</th><th>经验</th><th>带团记录</th><th>操作</th></tr>"""
+
+    <form method='get' style='margin:15px 0;'>
+        <input type='text' name='kw' placeholder='搜索导游姓名/电话' value='""" + kw + """' style='width:280px;'>
+        <button class='btn'>搜索</button>
+    </form>
+
+    <table><tr><th>ID</th><th>姓名</th><th>电话</th><th>从业经验</th><th>带团履历</th><th>操作</th></tr>"""
     for row in data:
         html += f"""
         <tr>
@@ -458,7 +469,7 @@ def guide_list():
                 <a href='/guide/delete/{row[0]}' class='btn btn-red' onclick='return confirm("确定删除？")'>删除</a>
             </td>
         </tr>"""
-    html += """</table></div></div>"""
+    html += """</table><br><a href='/index'>← 返回首页</a></div></div>"""
     return html
 
 @app.route('/guide/add', methods=['GET','POST'])
@@ -467,11 +478,12 @@ def guide_add():
     if request.method == 'POST':
         name=request.form['name']
         phone=request.form['phone']
-        exp=request.form['exp']
-        record=request.form['record']
+        experience=request.form['experience']
+        team_records=request.form['team_records']
         db, cur=get_db()
-        cur.execute("INSERT INTO guide(name,phone,exp,record) VALUES(%s,%s,%s,%s)",
-                    (name,phone,exp,record))
+        # 这里字段名必须和你数据库里的完全一致
+        cur.execute("INSERT INTO guide(name, phone, experience, team_records) VALUES(%s, %s, %s, %s)",
+                    (name, phone, experience, team_records))
         db.commit()
         db.close()
         flash("添加成功","success")
@@ -481,25 +493,26 @@ def guide_add():
     <h2>➕ 添加导游</h2>
     <form method='post'>
         <input type='text' name='name' placeholder='姓名' required>
-        <input type='text' name='phone' placeholder='电话' required>
-        <input type='text' name='exp' placeholder='经验'>
-        <textarea name='record' placeholder='带团记录'></textarea>
-        <button class='btn btn-green' style='width:100%;'>保存</button>
+        <input type='text' name='phone' placeholder='联系电话' required>
+        <input type='text' name='experience' placeholder='从业经验'>
+        <textarea name='team_records' placeholder='带团履历'></textarea>
+        <button class='btn btn-green' style='width:100%;'>保存提交</button>
     </form>
     </div></div>
     """
 
 @app.route('/guide/edit/<int:gid>', methods=['GET','POST'])
-def guide_edit():
+def guide_edit(gid):
     if 'uid' not in session: return redirect('/')
     db, cur=get_db()
     if request.method == 'POST':
         name=request.form['name']
         phone=request.form['phone']
-        exp=request.form['exp']
-        record=request.form['record']
-        cur.execute("UPDATE guide SET name=%s,phone=%s,exp=%s,record=%s WHERE guide_id=%s",
-                    (name,phone,exp,record,gid))
+        experience=request.form['experience']
+        team_records=request.form['team_records']
+        # 这里字段名也必须和你数据库里的完全一致
+        cur.execute("UPDATE guide SET name=%s, phone=%s, experience=%s, team_records=%s WHERE guide_id=%s",
+                    (name, phone, experience, team_records, gid))
         db.commit()
         db.close()
         flash("修改成功","success")
@@ -509,19 +522,19 @@ def guide_edit():
     db.close()
     return STYLE + f"""
     <div class='container'><div class='card'>
-    <h2>✏️ 修改导游</h2>
+    <h2>✏️ 修改导游信息</h2>
     <form method='post'>
         <input type='text' name='name' value='{row[1]}' required>
         <input type='text' name='phone' value='{row[2]}' required>
-        <input type='text' name='exp' value='{row[3]}'>
-        <textarea name='record'>{row[4]}</textarea>
-        <button class='btn btn-yellow'>保存</button>
+        <input type='text' name='experience' value='{row[3]}'>
+        <textarea name='team_records'>{row[4]}</textarea>
+        <button class='btn btn-yellow'>保存修改</button>
     </form>
     </div></div>
     """
 
 @app.route('/guide/delete/<int:gid>')
-def guide_delete():
+def guide_delete(gid):
     if 'uid' not in session: return redirect('/')
     db, cur=get_db()
     cur.execute("DELETE FROM guide WHERE guide_id=%s",(gid,))
@@ -529,7 +542,6 @@ def guide_delete():
     db.close()
     flash("删除成功","success")
     return redirect('/guide')
-
 # ========== 团队管理 ==========
 @app.route('/group')
 def group_list():
@@ -541,10 +553,10 @@ def group_list():
     html=STYLE + """
     <div class='container'><div class='card'>
     <div style='display:flex;justify-content:space-between;align-items:center;'>
-        <h1>🚍 团队列表</h1>
+        <h2>🚍 团队管理</h2>
         <a href='/group/add' class='btn btn-green'>➕ 添加团队</a>
     </div>
-    <table><tr><th>团ID</th><th>线路ID</th><th>导游ID</th><th>出发</th><th>结束</th><th>最大人数</th><th>状态</th><th>操作</th></tr>"""
+    <table><tr><th>团ID</th><th>线路编号</th><th>导游编号</th><th>出发日期</th><th>结束日期</th><th>最大人数</th><th>团队状态</th><th>操作</th></tr>"""
     for row in data:
         html += f"""
         <tr>
@@ -554,7 +566,7 @@ def group_list():
                 <a href='/group/delete/{row[0]}' class='btn btn-red' onclick='return confirm("确定删除？")'>删除</a>
             </td>
         </tr>"""
-    html += """</table></div></div>"""
+    html += """</table><br><a href='/index'>← 返回首页</a></div></div>"""
     return html
 
 @app.route('/group/add', methods=['GET','POST'])
@@ -576,25 +588,25 @@ def group_add():
         return redirect('/group')
     return STYLE + """
     <div class='container'><div class='card' style='max-width:500px;margin:30px auto;'>
-    <h2>➕ 添加团队</h2>
+    <h2>➕ 添加旅游团队</h2>
     <form method='post'>
-        <input type='number' name='line_id' placeholder='线路ID' required>
-        <input type='number' name='guide_id' placeholder='导游ID' required>
+        <input type='number' name='line_id' placeholder='填写线路ID' required>
+        <input type='number' name='guide_id' placeholder='填写导游ID' required>
         <input type='date' name='start_date' required>
         <input type='date' name='end_date' required>
-        <input type='number' name='max_num' placeholder='最大人数' required>
+        <input type='number' name='max_num' placeholder='团队最大人数' required>
         <select name='status'>
             <option value='未发团'>未发团</option>
             <option value='进行中'>进行中</option>
             <option value='已结束'>已结束</option>
         </select>
-        <button class='btn btn-green' style='width:100%;'>保存</button>
+        <button class='btn btn-green' style='width:100%;'>保存提交</button>
     </form>
     </div></div>
     """
 
 @app.route('/group/edit/<int:gid>', methods=['GET','POST'])
-def group_edit():
+def group_edit(gid):
     if 'uid' not in session: return redirect('/')
     db, cur=get_db()
     if request.method == 'POST':
@@ -615,7 +627,7 @@ def group_edit():
     db.close()
     return STYLE + f"""
     <div class='container'><div class='card'>
-    <h2>✏️ 修改团队</h2>
+    <h2>✏️ 修改团队信息</h2>
     <form method='post'>
         <input type='number' name='line_id' value='{row[1]}' required>
         <input type='number' name='guide_id' value='{row[2]}' required>
@@ -627,13 +639,13 @@ def group_edit():
             <option value='进行中' {'selected' if row[6]=='进行中' else ''}>进行中</option>
             <option value='已结束' {'selected' if row[6]=='已结束' else ''}>已结束</option>
         </select>
-        <button class='btn btn-yellow'>保存</button>
+        <button class='btn btn-yellow'>保存修改</button>
     </form>
     </div></div>
     """
 
 @app.route('/group/delete/<int:gid>')
-def group_delete():
+def group_delete(gid):
     if 'uid' not in session: return redirect('/')
     db, cur=get_db()
     cur.execute("DELETE FROM tour_group WHERE group_id=%s",(gid,))
@@ -641,83 +653,136 @@ def group_delete():
     db.close()
     flash("删除成功","success")
     return redirect('/group')
-
-# ========== 订单管理 ==========
+# ========== 订单管理 完整代码 ==========
 @app.route('/order')
 def order_list():
     if 'uid' not in session: return redirect('/')
+    kw = request.args.get("kw", "")
     db, cur=get_db()
-    cur.execute("SELECT * FROM orders")
+
+    if kw:
+        cur.execute("SELECT * FROM orders WHERE group_id LIKE %s OR customer_id LIKE %s", (f"%{kw}%", f"%{kw}%"))
+    else:
+        cur.execute("SELECT * FROM orders")
+
     data=cur.fetchall()
     db.close()
+
     html=STYLE + """
     <div class='container'><div class='card'>
     <div style='display:flex;justify-content:space-between;align-items:center;'>
-        <h1>🧾 订单列表</h1>
+        <h2>🧾 订单管理</h2>
         <a href='/order/add' class='btn btn-green'>➕ 添加订单</a>
     </div>
-    <table><tr><th>订单ID</th><th>团ID</th><th>客户ID</th><th>状态</th><th>实收</th><th>余款</th><th>总价</th><th>操作</th></tr>"""
+
+    <form method='get' style='margin:15px 0;'>
+        <input type='text' name='kw' placeholder='搜索团ID/客户ID' value='""" + kw + """' style='width:280px;'>
+        <button class='btn'>搜索</button>
+    </form>
+
+    <table><tr><th>订单ID</th><th>团ID</th><th>客户ID</th><th>订单状态</th><th>已收金额</th><th>剩余尾款</th><th>订单总价</th><th>操作</th></tr>"""
+
     for row in data:
+        # 数字强制转汉字
+        if row[3] == 0:
+            status_text = "待付款"
+        elif row[3] == 1:
+            status_text = "已付款"
+        else:
+            status_text = "已取消"
+
         html += f"""
         <tr>
-            <td>{row[0]}</td><td>{row[1]}</td><td>{row[2]}</td><td>{row[3]}</td><td>{row[4]}</td><td>{row[5]}</td><td>{row[6]}</td>
+            <td>{row[0]}</td>
+            <td>{row[1]}</td>
+            <td>{row[2]}</td>
+            <td>{status_text}</td>
+            <td>{row[4]}</td>
+            <td>{row[5]}</td>
+            <td>{row[6]}</td>
             <td>
                 <a href='/order/edit/{row[0]}' class='btn btn-yellow'>修改</a>
                 <a href='/order/delete/{row[0]}' class='btn btn-red' onclick='return confirm("确定删除？")'>删除</a>
             </td>
         </tr>"""
-    html += """</table></div></div>"""
+
+    html += """</table><br><a href='/index'>← 返回首页</a></div></div>"""
     return html
 
 @app.route('/order/add', methods=['GET','POST'])
 def order_add():
     if 'uid' not in session: return redirect('/')
+    db, cur=get_db()
+    cur.execute("SELECT customer_id, name FROM customer")
+    customers = cur.fetchall()
+    cur.execute("SELECT group_id FROM tour_group")
+    groups = cur.fetchall()
+    db.close()
+
     if request.method == 'POST':
         group_id=request.form['group_id']
         customer_id=request.form['customer_id']
-        status=request.form['status']
-        paid=request.form['paid']
+        order_status=request.form['order_status']
+        received_amount=request.form['received_amount']
         balance=request.form['balance']
-        total=request.form['total']
+        total_price=request.form['total_price']
         db, cur=get_db()
-        cur.execute("INSERT INTO orders(group_id,customer_id,status,paid,balance,total) VALUES(%s,%s,%s,%s,%s,%s)",
-                    (group_id,customer_id,status,paid,balance,total))
+        cur.execute("""
+            INSERT INTO orders(group_id, customer_id, order_status, received_amount, balance, total_price)
+            VALUES(%s, %s, %s, %s, %s, %s)
+        """, (group_id, customer_id, order_status, received_amount, balance, total_price))
         db.commit()
         db.close()
         flash("添加成功","success")
         return redirect('/order')
-    return STYLE + """
+
+    customer_options = "".join([f"<option value='{cid}'>{cid} - {name}</option>" for cid, name in customers])
+    group_options = "".join([f"<option value='{gid}'>{gid}</option>" for gid, in groups])
+
+    return STYLE + f"""
     <div class='container'><div class='card' style='max-width:500px;margin:30px auto;'>
-    <h2>➕ 添加订单</h2>
+    <h2>➕ 新增旅游订单</h2>
     <form method='post'>
-        <input type='number' name='group_id' placeholder='团ID' required>
-        <input type='number' name='customer_id' placeholder='客户ID' required>
-        <select name='status'>
-            <option value='待付款'>待付款</option>
-            <option value='已付款'>已付款</option>
-            <option value='已取消'>已取消</option>
+        <select name='group_id' required>
+            <option value=''>请选择团队</option>
+            {group_options}
         </select>
-        <input type='number' step='0.01' name='paid' placeholder='实收' required>
-        <input type='number' step='0.01' name='balance' placeholder='余款' required>
-        <input type='number' step='0.01' name='total' placeholder='总价' required>
-        <button class='btn btn-green' style='width:100%;'>保存</button>
+        <select name='customer_id' required>
+            <option value=''>请选择客户</option>
+            {customer_options}
+        </select>
+        <select name='order_status'>
+            <option value='0'>待付款</option>
+            <option value='1'>已付款</option>
+            <option value='2'>已取消</option>
+        </select>
+        <input type='number' step='0.01' name='received_amount' placeholder='已收金额' required>
+        <input type='number' step='0.01' name='balance' placeholder='剩余尾款' required>
+        <input type='number' step='0.01' name='total_price' placeholder='订单总金额' required>
+        <button class='btn btn-green' style='width:100%;'>保存提交</button>
     </form>
     </div></div>
     """
 
 @app.route('/order/edit/<int:oid>', methods=['GET','POST'])
-def order_edit():
+def order_edit(oid):
     if 'uid' not in session: return redirect('/')
     db, cur=get_db()
+    cur.execute("SELECT customer_id, name FROM customer")
+    customers = cur.fetchall()
+    cur.execute("SELECT group_id FROM tour_group")
+    groups = cur.fetchall()
     if request.method == 'POST':
         group_id=request.form['group_id']
         customer_id=request.form['customer_id']
-        status=request.form['status']
-        paid=request.form['paid']
+        order_status=request.form['order_status']
+        received_amount=request.form['received_amount']
         balance=request.form['balance']
-        total=request.form['total']
-        cur.execute("UPDATE orders SET group_id=%s,customer_id=%s,status=%s,paid=%s,balance=%s,total=%s WHERE order_id=%s",
-                    (group_id,customer_id,status,paid,balance,total,oid))
+        total_price=request.form['total_price']
+        cur.execute("""
+            UPDATE orders SET group_id=%s, customer_id=%s, order_status=%s, received_amount=%s, balance=%s, total_price=%s
+            WHERE order_id=%s
+        """, (group_id, customer_id, order_status, received_amount, balance, total_price, oid))
         db.commit()
         db.close()
         flash("修改成功","success")
@@ -725,27 +790,35 @@ def order_edit():
     cur.execute("SELECT * FROM orders WHERE order_id=%s",(oid,))
     row=cur.fetchone()
     db.close()
+
+    customer_options = "".join([f"<option value='{cid}' {'selected' if cid == row[2] else ''}>{cid} - {name}</option>" for cid, name in customers])
+    group_options = "".join([f"<option value='{gid}' {'selected' if gid == row[1] else ''}>{gid}</option>" for gid, in groups])
+
     return STYLE + f"""
     <div class='container'><div class='card'>
-    <h2>✏️ 修改订单</h2>
+    <h2>✏️ 修改订单信息</h2>
     <form method='post'>
-        <input type='number' name='group_id' value='{row[1]}' required>
-        <input type='number' name='customer_id' value='{row[2]}' required>
-        <select name='status'>
-            <option value='待付款' {'selected' if row[3]=='待付款' else ''}>待付款</option>
-            <option value='已付款' {'selected' if row[3]=='已付款' else ''}>已付款</option>
-            <option value='已取消' {'selected' if row[3]=='已取消' else ''}>已取消</option>
+        <select name='group_id' required>
+            {group_options}
         </select>
-        <input type='number' step='0.01' name='paid' value='{row[4]}' required>
+        <select name='customer_id' required>
+            {customer_options}
+        </select>
+        <select name='order_status'>
+            <option value='0' {'selected' if row[3]==0 else ''}>待付款</option>
+            <option value='1' {'selected' if row[3]==1 else ''}>已付款</option>
+            <option value='2' {'selected' if row[3]==2 else ''}>已取消</option>
+        </select>
+        <input type='number' step='0.01' name='received_amount' value='{row[4]}' required>
         <input type='number' step='0.01' name='balance' value='{row[5]}' required>
-        <input type='number' step='0.01' name='total' value='{row[6]}' required>
-        <button class='btn btn-yellow'>保存</button>
+        <input type='number' step='0.01' name='total_price' value='{row[6]}' required>
+        <button class='btn btn-yellow'>保存修改</button>
     </form>
     </div></div>
     """
 
 @app.route('/order/delete/<int:oid>')
-def order_delete():
+def order_delete(oid):
     if 'uid' not in session: return redirect('/')
     db, cur=get_db()
     cur.execute("DELETE FROM orders WHERE order_id=%s",(oid,))
@@ -753,7 +826,6 @@ def order_delete():
     db.close()
     flash("删除成功","success")
     return redirect('/order')
-
 # ========== 费用管理 ==========
 @app.route('/fee')
 def fee_list():
