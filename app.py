@@ -545,10 +545,23 @@ def guide_delete(gid):
 
 # ========== 团队管理 ==========
 @app.route('/group')
+@app.route('/group')
 def group_list():
     if 'uid' not in session: return redirect('/')
+
+    # ===================== 只加这一段 =====================
+    kw = request.args.get("kw", "")
+    # ======================================================
+
     db, cur=get_db()
-    cur.execute("SELECT * FROM tour_group")
+
+    # ===================== 只加这一段 =====================
+    if kw:
+        cur.execute("SELECT * FROM tour_group WHERE group_id LIKE %s OR line_id LIKE %s OR guide_id LIKE %s OR status LIKE %s", (f"%{kw}%", f"%{kw}%", f"%{kw}%", f"%{kw}%"))
+    else:
+    # ======================================================
+
+        cur.execute("SELECT * FROM tour_group")
     data=cur.fetchall()
     db.close()
     html=STYLE + """
@@ -557,6 +570,14 @@ def group_list():
         <h2>🚍 团队管理</h2>
         <a href='/group/add' class='btn btn-green'>➕ 添加团队</a>
     </div>
+
+    <!-- ==================== 只加这一行搜索框 ==================== -->
+    <form method='get' style='margin:15px 0;'>
+        <input type='text' name='kw' placeholder='搜索团队' style='width:280px;'>
+        <button class='btn'>搜索</button>
+    </form>
+    <!-- =========================================================== -->
+
     <table><tr><th>团ID</th><th>线路编号</th><th>导游编号</th><th>出发日期</th><th>结束日期</th><th>最大人数</th><th>团队状态</th><th>操作</th></tr>"""
     for row in data:
         html += f"""
@@ -648,7 +669,7 @@ def group_edit(gid):
         max_num=request.form['max_num']
         status=request.form['status']
         cur.execute("UPDATE tour_group SET line_id=%s,guide_id=%s,start_date=%s,end_date=%s,max_num=%s,status=%s WHERE group_id=%s",
-                    (line_id,guide,start_date,end_date,max_num,status,gid))
+                    (line_id,guide_id,start_date,end_date,max_num,status,gid))
         db.commit()
         db.close()
         flash("修改成功","success")
@@ -786,12 +807,14 @@ def order_edit(oid):
     customers = cur.fetchall()
     cur.execute("SELECT group_id FROM tour_group")
     groups = cur.fetchall()
+    db.close()
     if request.method == 'POST':
         group_id=request.form['group_id']
         customer_id=request.form['customer_id']
         order_status=request.form['order_status']
         received_amount=request.form['received_amount']
         balance=request.form['balance']
+        db, cur = get_db()
         total_price=request.form['total_price']
         cur.execute("""
             UPDATE orders SET group_id=%s, customer_id=%s, order_status=%s, received_amount=%s, balance=%s, total_price=%s
@@ -805,7 +828,7 @@ def order_edit(oid):
     row=cur.fetchone()
     db.close()
     customer_options = "".join([f"<option value='{cid}' {'selected' if cid == row[2] else ''}>{cid} - {name}</option>" for cid, name in customers])
-    group_options = "".join([f"<option value='{gid}' {'selected' if gid == row[1] else ''}>{gid}</option>" for gid, in groups])
+    group_options = "".join([f"<option value='{gid[0]}' {'selected' if gid[0] == row[1] else ''}>{gid[0]}</option>" for gid, in groups])
     return STYLE + f"""
     <div class='container'><div class='card'>
     <h2>✏️ 修改订单信息</h2>
@@ -825,6 +848,41 @@ def order_edit(oid):
         <input type='number' step='0.01' name='balance' value='{row[5]}' required>
         <input type='number' step='0.01' name='total_price' value='{row[6]}' required>
         <button class='btn btn-yellow'>保存修改</button>
+    </form>
+    </div></div>
+    """
+
+@app.route('/fee/add', methods=['GET','POST'])
+def fee_add():
+    if 'uid' not in session:
+        return redirect('/')
+    if request.method == 'POST':
+        group_id = request.form['group_id']
+        income = request.form['income']
+        land_fee = request.form['land_fee']
+        guide_subsidy = request.form['guide_subsidy']
+        insurance_fee = request.form['insurance_fee']
+        profit = request.form['profit']
+        db, cur = get_db()
+        cur.execute("""
+            INSERT INTO fee(group_id, income, land_fee, guide_subsidy, insurance_fee, profit)
+            VALUES(%s,%s,%s,%s,%s,%s)
+        """, (group_id, income, land_fee, guide_subsidy, insurance_fee, profit))
+        db.commit()
+        db.close()
+        flash("添加成功","success")
+        return redirect('/fee')
+    return STYLE + """
+    <div class='container'><div class='card' style='max-width:500px;margin:30px auto;'>
+    <h2>➕ 添加费用</h2>
+    <form method='post'>
+        <input type='number' name='group_id' placeholder='团ID' required>
+        <input type='number' step='0.01' name='income' placeholder='团费收入' required>
+        <input type='number' step='0.01' name='land_fee' placeholder='地接费' required>
+        <input type='number' step='0.01' name='guide_subsidy' placeholder='导游补贴' required>
+        <input type='number' step='0.01' name='insurance_fee' placeholder='保险费' required>
+        <input type='number' step='0.01' name='profit' placeholder='利润' required>
+        <button class='btn btn-green' style='width:100%;'>保存</button>
     </form>
     </div></div>
     """
@@ -867,64 +925,33 @@ def fee_list():
     html += """</table><br><a href='/index'>← 返回首页</a></div></div>"""
     return html
 
-@app.route('/fee/add', methods=['GET','POST'])
-def fee_add():
-    if 'uid' not in session: return redirect('/')
-    if request.method == 'POST':
-        group_id = request.form['group_id']
-        income = request.form['income']
-        land_fee = request.form['land_fee']
-        guide_subsidy = request.form['guide_subsidy']
-        insurance_fee = request.form['insurance_fee']
-        profit = request.form['profit']
-        db, cur = get_db()
-        cur.execute("""
-            INSERT INTO fee(group_id, income, land_fee, guide_subsidy, insurance_fee, profit)
-            VALUES(%s,%s,%s,%s,%s,%s)
-        """, (group_id, income, land_fee, guide_subsidy, insurance_fee, profit))
-        db.commit()
-        db.close()
-        flash("添加成功","success")
-        return redirect('/fee')
-    return STYLE + """
-    <div class='container'><div class='card' style='max-width:500px;margin:30px auto;'>
-    <h2>➕ 添加费用</h2>
-    <form method='post'>
-        <input type='number' name='group_id' placeholder='团ID' required>
-        <input type='number' step='0.01' name='income' placeholder='团费收入' required>
-        <input type='number' step='0.01' name='land_fee' placeholder='地接费' required>
-        <input type='number' step='0.01' name='guide_subsidy' placeholder='导游补贴' required>
-        <input type='number' step='0.01' name='insurance_fee' placeholder='保险费' required>
-        <input type='number' step='0.01' name='profit' placeholder='利润' required>
-        <button class='btn btn-green' style='width:100%;'>保存</button>
-    </form>
-    </div></div>
-    """
 
 @app.route('/fee/edit/<int:fid>', methods=['GET','POST'])
 def fee_edit(fid):
-    if 'uid' not in session: return redirect('/')
-    db, cur = get_db()
-    if request.method == 'POST':
+     
+     if 'uid' not in session: 
+         return redirect('/')
+     
+     db, cur = get_db()
+
+     if request.method == 'POST':
         group_id = request.form['group_id']
         income = request.form['income']
         land_fee = request.form['land_fee']
         guide_subsidy = request.form['guide_subsidy']
         insurance_fee = request.form['insurance_fee']
         profit = request.form['profit']
-        cur.execute("""
-            UPDATE fee
-            SET group_id=%s,income=%s,land_fee=%s,guide_subsidy=%s,insurance_fee=%s,profit=%s
-            WHERE fee_id=%s
-        """, (group_id, income, land_fee, guide_subsidy, insurance_fee, profit, fid))
+        cur.execute("UPDATE fee SET group_id=%s, income=%s, land_fee=%s, guide_subsidy=%s, insurance_fee=%s, profit=%s WHERE fee_id=%s", (group_id, income, land_fee, guide_subsidy, insurance_fee, profit, fid))
         db.commit()
         db.close()
-        flash("修改成功","success")
+        flash("修改成功", "success")
         return redirect('/fee')
-    cur.execute("SELECT * FROM fee WHERE fee_id=%s",(fid,))
-    row=cur.fetchone()
-    db.close()
-    return STYLE + f"""
+     
+     
+     cur.execute("SELECT * FROM fee WHERE fee_id=%s", (fid,))
+     row = cur.fetchone()
+     db.close()
+     return STYLE + f"""
     <div class='container'><div class='card'>
     <h2>✏️ 修改费用</h2>
     <form method='post'>
